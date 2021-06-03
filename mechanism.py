@@ -22,7 +22,8 @@ class Mechanism():
         assert bidders.values is not None, 'Bidders have not revealed their object values.'
         self.Q = np.zeros((self.bidders.N, self.bidders.M))
         self.P = np.zeros((self.bidders.N, self.bidders.M))
-        self.prices = np.zeros(self.bidders.M)
+        #self.prices = np.zeros(self.bidders.M)
+
 
         # self.T = 1
 
@@ -44,6 +45,9 @@ class Mechanism():
 
     def compute_social_welfare(self):
         return np.sum([[self.Q[i][j] * self.bidders.values[i][j] for j in range(self.M)] for i in range(self.N)])
+
+    def compute_individual_utility(self):
+        return sum([(self.bidders.values[0][j] - self.prices[j]) * self.Q[0][j] for j in range(self.M)])
 
     def report(self):
         print('B (budgets)\n', self.bidders.B)
@@ -68,6 +72,7 @@ class VickereyAuction(Mechanism):
         self.compute_Q()
         self.compute_P()
         self.prices = self.compute_second_best_price()
+        self.bids = self.bidders.values
 
     def compute_Q(self):
         for j in range(self.bidders.M):
@@ -85,6 +90,7 @@ class FirstPriceAuction(Mechanism):
         super().__init__(bidders)
         self.compute_Q()
         self.compute_P()
+        self.bids = self.bidders.values
 
     def compute_Q(self):
         for j in range(self.bidders.M):
@@ -388,6 +394,7 @@ class AdaptivePacing(Mechanism):
         self.eps = [(self.M) ** (-0.5)] * self.N
 
         self.utility = None
+        self.prices = np.zeros(self.M)
         self.bids = np.zeros((self.N, self.M))  # for truthfull mechanism the bids equals self.bidders.values, not here
         self.Budgets = np.zeros((self.N, self.M))
         self.Budgets[:, 0] = self.bidders.B
@@ -413,8 +420,10 @@ class AdaptivePacing(Mechanism):
                 self.bids[i, j] = min(self.bidders.values[i, j] / (1 + self.mu[i, j]), self.Budgets[i, j])
 
             best_price = np.amax(self.bids[:, j])
-            print(self.bids[:, j])
+
+
             second_best_price = np.sort(self.bids[:, j])[-2]
+            self.prices[j] = second_best_price
             winners = np.array(np.argwhere(self.bids[:, j] == best_price).flatten().tolist())
             self.Q[winners, j] = 1 / len(winners)
             winner = np.random.choice(range(self.bidders.N), p=self.Q[:, j])
@@ -437,6 +446,78 @@ class AdaptivePacing(Mechanism):
         super().report()
         print('Budgets evolution \n', self.Budgets)
         print('Mu \n', self.mu)
+
+
+
+class IndividualAdaptivePacing(Mechanism):
+    """
+    Adaptive pacing mechanism. We consider that every player is using an adaptive pacing mechanism.
+    From 'Balseiro 2019, Learning in Repeated Auctions with Budgets: Regret Minimization and Equilibrium'
+    """
+
+    def __init__(self, bidders, users, fairness_constraint, ):
+        super().__init__(bidders, users, fairness_constraint)
+
+        self.mu = np.zeros((self.N, self.M))
+        # here we can init mu[:,0] with a custom values!
+        self.rho = np.array(self.bidders.B) / self.M  # target expenditure
+        self.eps = [(self.M) ** (-0.5)] * self.N
+
+        self.utility = None
+        self.prices = np.zeros(self.M)
+        self.bids = np.zeros((self.N, self.M))  # for truthfull mechanism the bids equals self.bidders.values, not here
+        self.Budgets = np.zeros((self.N, self.M))
+        self.Budgets[:, 0] = self.bidders.B
+
+        # assert isinstance(bidders,Bidders_budget),"Multiplicative Pacing mechanism needs budget" #Ne marche pas actuellement voir comment check des sous classes!
+        self.solve()
+        self.compute_Q()
+        self.compute_P()
+        self.stats()
+        self.no_solution = False
+
+    def compute_best_price(self):
+        return np.amax(self.bids, axis=0)
+
+    def compute_second_best_price(self):
+        return [np.sort(np.unique(self.bids[:, j]))[-2] for j in
+                range(self.bidders.M)]  # pb si il tous les bidders mettemt le meme prix!
+
+    def solve(self):
+        mu_bar = np.ones(self.N) * 10
+        for j in range(self.M):
+
+            self.bids[0, j] = min(self.bidders.values[0, j] / (1 + self.mu[0, j]), self.Budgets[0, j])
+
+            best_price = np.amax(self.bids[:, j])
+
+
+            second_best_price = np.sort(self.bids[:, j])[-2]
+            self.prices[j] = second_best_price
+            winners = np.array(np.argwhere(self.bids[:, j] == best_price).flatten().tolist())
+            self.Q[winners, j] = 1 / len(winners)
+            winner = np.random.choice(range(self.bidders.N), p=self.Q[:, j])
+
+            self.P[winner, j] = second_best_price
+            if j < self.M - 1:
+                self.Budgets[:, j + 1] = self.Budgets[:, j]
+                self.Budgets[winner, j + 1] -= second_best_price
+                for i in range(self.N):
+                    self.mu[i, j + 1] = min(max(self.mu[i, j] - self.eps[i] * (self.rho[i] - self.P[i, j]), 0),
+                                            mu_bar[i])
+
+    def compute_Q(self):
+        pass
+
+    def compute_P(self):
+        pass
+
+    def report(self):
+        super().report()
+        print('Budgets evolution \n', self.Budgets)
+        print('Mu \n', self.mu)
+
+
 
 
 class Hindsight(Mechanism):
@@ -487,7 +568,7 @@ class Hindsight(Mechanism):
             self.bids[self.k, el] = self.bidders.values[self.k, el] # advertiser k only bids on object he want to win
         self.best_price = np.amax(self.bids, axis=0)
         self.second_best_price = [np.sort(self.bids[:, j])[-2] for j in range(self.bidders.M)]
-
+        self.prices = self.second_best_price
 
     def compute_Q(self):
 
