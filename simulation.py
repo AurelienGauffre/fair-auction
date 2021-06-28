@@ -66,5 +66,5 @@ def simulation_one_parameter(params, strats_type, constraints_type,n,plot=True):
         fig.show()
         fig = px.box(df, x=x_name, y="utility", color="name")
         fig.show()
-    return df
+    return df,fig
 

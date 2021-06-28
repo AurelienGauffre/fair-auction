@@ -30,6 +30,8 @@ class Strategy():
             print(sum([self.user[el] == 0 for el in self.selected]) / len(self.selected))
     def compute_fairness(self):
         return sum([self.user[el] == 0 for el in self.selected]) / len(self.selected) *2 #to adapt for more class
+    def compute_utility(self):
+        return sum([self.v_k[el] - self.d_k[el] for el in self.selected])
 
 class HindsightStrat(Strategy):
     def __init__(self, v_k, d_k, B,eps=None,eps_gamma=None, user=None, fairness_constraint=None):
@@ -60,7 +62,7 @@ class HindsightStrat(Strategy):
         # print(model.num_solutions)
         self.selected = [i for i in range(self.M) if x[i].x >= 0.99]
 
-        self.utility = sum([self.v_k[el] - self.d_k[el] for el in self.selected])
+        self.utility = self.compute_utility()
 
 
 class AdaptivePacingStrat(Strategy):
@@ -168,7 +170,7 @@ class AdaptivePacingStrat(Strategy):
                                 np.sum([self.o_gamma[gamma, :j]]) / (j + 1)
                                 - self.fairness_constraint.lam *sum([self.o_gamma[gamma, el] for el in self.selected]) / (len(
                             self.selected) + 0.01)), 0), mu_bar)
-        self.utility = sum([self.v_k[el] - self.d_k[el] for el in self.selected])
+        self.utility = self.compute_utility()
 
 
 class AdaptivePacingStrat_bis(Strategy):
@@ -204,7 +206,7 @@ class AdaptivePacingStrat_bis(Strategy):
                     self.mu[j + 1] = min(max(self.mu[j] - self.eps * (self.target_expenditure*(j+1) - sum([self.d_k[el] for el in self.selected])), 0),
                                          mu_bar)
 
-        self.utility = sum([self.v_k[el] - self.d_k[el] for el in self.selected])
+        self.utility = self.compute_utility()
 
 class TruthfullBiddingStrat(Strategy):
     def __init__(self, v_k, d_k, B):
@@ -224,4 +226,4 @@ class TruthfullBiddingStrat(Strategy):
             if j < self.M - 1:
                 self.Budgets[j + 1] = self.Budgets[j] - self.d_k[j] * win
 
-        self.utility = sum([self.v_k[el] - self.d_k[el] for el in self.selected])
+        self.utility = self.compute_utility()
