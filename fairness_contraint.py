@@ -7,7 +7,7 @@ class Proportion_constraint(Fairness_constraint):
     def __init__(self, lam):
         self.lam = lam
 
-class Proportion_constraint_bis(Fairness_constraint):
+class Proportion_constraint_cumulative(Fairness_constraint):
     def __init__(self, lam):
         self.lam = lam
 

@@ -1,7 +1,7 @@
 import numpy as np
 
 from mip import Model, xsum, minimize, BINARY, maximize
-from fairness_contraint import Proportion_constraint, Proportion_constraint_bis
+from fairness_contraint import Proportion_constraint, Proportion_constraint_cumulative
 
 
 class Strategy():
@@ -31,7 +31,7 @@ class Strategy():
     def compute_fairness(self):
         return sum([self.user[el] == 0 for el in self.selected]) / len(self.selected) *2 #to adapt for more class
     def compute_utility(self):
-        return sum([self.v_k[el] - self.d_k[el] for el in self.selected])
+        return sum([self.v_k[el] - self.d_k[el] for el in self.selected])/self.M
 
 class HindsightStrat(Strategy):
     def __init__(self, v_k, d_k, B,eps=None,eps_gamma=None, user=None, fairness_constraint=None):
@@ -74,7 +74,7 @@ class AdaptivePacingStrat(Strategy):
         self.Budgets[0] = self.B
         self.target_expenditure = self.B / self.M
 
-        if type(self.fairness_constraint) in [Proportion_constraint, Proportion_constraint_bis]:
+        if type(self.fairness_constraint) in [Proportion_constraint, Proportion_constraint_cumulative]:
             self.mu_gamma = np.zeros((self.Gamma, self.M))
             self.o_gamma = np.zeros((self.Gamma, self.M))
             for gamma in range(self.Gamma):
@@ -152,7 +152,7 @@ class AdaptivePacingStrat(Strategy):
                         self.mu_gamma[gamma, j + 1] = min(
                             max(self.mu_gamma[gamma, j] - self.eps_gamma * (0.5/self.fairness_constraint.lam - self.o_gamma[gamma, j] * win), 0),mu_bar)
 
-        elif type(self.fairness_constraint) == Proportion_constraint_bis:
+        elif type(self.fairness_constraint) == Proportion_constraint_cumulative:
             for j in range(self.M):
 
                 self.bids[j] = min(
@@ -173,7 +173,7 @@ class AdaptivePacingStrat(Strategy):
         self.utility = self.compute_utility()
 
 
-class AdaptivePacingStrat_bis(Strategy):
+class AdaptivePacingStrat_cumulative(Strategy):
     def __init__(self, v_k, d_k, B,eps=None,eps_gamma=None,user=None, fairness_constraint=None):
         super().__init__(v_k, d_k, B,eps,eps_gamma, user, fairness_constraint)
         self.bids = np.zeros(self.M)
@@ -182,7 +182,7 @@ class AdaptivePacingStrat_bis(Strategy):
         self.Budgets[0] = self.B
         self.target_expenditure = self.B / self.M
 
-        if type(self.fairness_constraint) in [Proportion_constraint, Proportion_constraint_bis]:
+        if type(self.fairness_constraint) in [Proportion_constraint, Proportion_constraint_cumulative]:
             self.mu_gamma = np.zeros((self.Gamma, self.M))
             self.o_gamma = np.zeros((self.Gamma, self.M))
             for gamma in range(self.Gamma):
