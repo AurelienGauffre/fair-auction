@@ -29,7 +29,7 @@ class Strategy():
         if self.user is not None:
             print(sum([self.user[el] == 0 for el in self.selected]) / len(self.selected))
     def compute_fairness(self):
-        return sum([self.user[el] == 0 for el in self.selected]) / len(self.selected) *2 #to adapt for more class
+        return sum([self.user[el] == 0 for el in self.selected]) / len(self.selected) * 2 #to adapt for more class
     def compute_utility(self):
         return sum([self.v_k[el] - self.d_k[el] for el in self.selected])/self.M
 
@@ -150,7 +150,7 @@ class AdaptivePacingStrat(Strategy):
                         #     mu_bar)
 
                         self.mu_gamma[gamma, j + 1] = min(
-                            max(self.mu_gamma[gamma, j] - self.eps_gamma * (0.5/self.fairness_constraint.lam - self.o_gamma[gamma, j] * win), 0),mu_bar)
+                            max(self.mu_gamma[gamma, j] - self.eps_gamma * (1/10/self.fairness_constraint.lam - self.o_gamma[gamma, j] * win), 0),mu_bar)
 
         elif type(self.fairness_constraint) == Proportion_constraint_cumulative:
             for j in range(self.M):
