@@ -1,8 +1,7 @@
 import numpy as np
 
 from mip import Model, xsum, minimize, BINARY, maximize
-from fairness_contraint import Proportion_constraint, Proportion_constraint_cumulative
-
+from fairness_contraint import Linear_constraint_absoAP,Linear_constraint_absoAPC,Linear_constraint_ratioAP,Linear_constraint_ratioAPC, Linear_constraint_cumulative
 
 class Strategy():
     def __init__(self, v_k, d_k, B,eps=None,eps_gamma=None,user=None, fairness_constraint=None):
@@ -29,7 +28,7 @@ class Strategy():
         if self.user is not None:
             print(sum([self.user[el] == 0 for el in self.selected]) / len(self.selected))
     def compute_fairness(self):
-        return sum([self.user[el] == 0 for el in self.selected]) / len(self.selected) * 2 #to adapt for more class
+        return 1/(sum([self.user[el] == 1 for el in self.selected]) / len(self.selected)) / 2 #to adapt for more class
     def compute_utility(self):
         return sum([self.v_k[el] - self.d_k[el] for el in self.selected])/self.M
 
@@ -49,7 +48,7 @@ class HindsightStrat(Strategy):
         model.objective = maximize(xsum(utility_k[i] * x[i] for i in range(self.M)))
         model += xsum(self.d_k[i] * x[i] for i in range(self.M)) <= self.B
 
-        if type(self.fairness_constraint) == Proportion_constraint:
+        if self.fairness_constraint is not None:
             for gamma in range(self.Gamma):
                 # o_gamma = np.array(np.array(self.user)==gamma,dtype=float) # does not work with np array
                 o_gamma = [self.user[i] == gamma for i in range(self.M)]
@@ -74,7 +73,7 @@ class AdaptivePacingStrat(Strategy):
         self.Budgets[0] = self.B
         self.target_expenditure = self.B / self.M
 
-        if type(self.fairness_constraint) in [Proportion_constraint, Proportion_constraint_cumulative]:
+        if self.fairness_constraint is not None:
             self.mu_gamma = np.zeros((self.Gamma, self.M))
             self.o_gamma = np.zeros((self.Gamma, self.M))
             for gamma in range(self.Gamma):
@@ -98,7 +97,8 @@ class AdaptivePacingStrat(Strategy):
                     self.mu[j + 1] = min(max(self.mu[j] - self.eps * (self.target_expenditure - self.d_k[j] * win), 0),
                                          mu_bar)
 
-        elif type(self.fairness_constraint) == Proportion_constraint:
+        else : #we have a linear constraint
+            A_gamma = {gamma:[] for gamma in range(self.Gamma)}
             for j in range(self.M):
                 # a optimiser avec un produit scalaire
                 # self.bids[j] = min((self.v_k[j] - sum(
@@ -126,6 +126,8 @@ class AdaptivePacingStrat(Strategy):
                                          mu_bar)
 
                     for gamma in range(self.Gamma):
+
+                       # if self.fairness_constraint.type == '':
                         # u_gamma=len(self.selected)*sum(self.user[0:j])/(j+1)**2/self.fairness_constraint.lam
                         # self.mu_gamma[gamma, j + 1] = min(
                         #     max(self.mu_gamma[gamma,j] - self.eps * (u_gamma- self.o_gamma[gamma,j] * win), 0),
@@ -149,27 +151,60 @@ class AdaptivePacingStrat(Strategy):
                         #             1/(3*(2)*self.fairness_constraint.lam) - self.o_gamma[gamma, j] * win), 0),
                         #     mu_bar)
 
-                        self.mu_gamma[gamma, j + 1] = min(
-                            max(self.mu_gamma[gamma, j] - self.eps_gamma * (1/10/self.fairness_constraint.lam - self.o_gamma[gamma, j] * win), 0),mu_bar)
+                        # up date avec un parametre approximatif
+                        # self.mu_gamma[gamma, j + 1] = min(
+                        #     max(self.mu_gamma[gamma, j] - self.eps_gamma * (1/10/self.fairness_constraint.lam - self.o_gamma[gamma, j] * win), 0),mu_bar)
 
-        elif type(self.fairness_constraint) == Proportion_constraint_cumulative:
-            for j in range(self.M):
+                        # up date avec un parametre approximatif
+                        #    pass
 
-                self.bids[j] = min(
-                    (self.v_k[j]-self.mu_gamma[self.user[j], j]) / (1 + self.mu[j]  ),
-                    self.Budgets[j])
-                win = self.bids[j] >= self.d_k[j]
-                if win:
-                    self.selected += [j]
-                if j < self.M - 1:
-                    self.Budgets[j + 1] = self.Budgets[j] - self.d_k[j] * win
-                    self.mu[j + 1] = min(max(self.mu[j] - self.eps * (self.target_expenditure - self.d_k[j] * win), 0),
-                                         mu_bar)
-                    for gamma in range(self.Gamma):
-                        self.mu_gamma[gamma, j + 1] = min(max(self.mu_gamma[gamma, j] - self.eps_gamma * (
-                                np.sum([self.o_gamma[gamma, :j]]) / (j + 1)
-                                - self.fairness_constraint.lam *sum([self.o_gamma[gamma, el] for el in self.selected]) / (len(
-                            self.selected) + 0.01)), 0), mu_bar)
+                        if type(self.fairness_constraint) == Linear_constraint_absoAP:
+                            A_gamma[gamma] += [self.o_gamma[gamma, j]]
+                            b_gamma = self.M/2/5/self.fairness_constraint.lam # U_k/lambda
+
+                            self.mu_gamma[gamma, j + 1] = min(max(self.mu_gamma[gamma, j] - self.eps_gamma * (b_gamma / self.M - win * A_gamma[gamma][j]),0),mu_bar)
+
+                        if type(self.fairness_constraint) == Linear_constraint_absoAPC:
+                            A_gamma[gamma] += [self.o_gamma[gamma, j]]
+                            b_gamma = self.M / 2 /5 / self.fairness_constraint.lam  # U_k/lambda
+                            self.mu_gamma[gamma, j + 1] = min(max(self.mu_gamma[gamma, j] - self.eps_gamma * (b_gamma / self.M * (j+1) - sum([A_gamma[gamma][i] for i in self.selected])), 0), mu_bar)
+
+                        if type(self.fairness_constraint) == Linear_constraint_ratioAP:
+                            A_gamma[gamma] += [self.o_gamma[gamma,j]-1/2/self.fairness_constraint.lam]
+                            b_gamma = 0
+                            self.mu_gamma[gamma, j + 1] = min(max(self.mu_gamma[gamma, j] - self.eps_gamma * (b_gamma / self.M - win * A_gamma[gamma][j]),0),mu_bar)
+                        if type(self.fairness_constraint) == Linear_constraint_ratioAPC:
+                            A_gamma[gamma] += [self.o_gamma[gamma, j] - 1 / 2 / self.fairness_constraint.lam]
+                            b_gamma = 0
+                            self.mu_gamma[gamma, j + 1] = min(max(self.mu_gamma[gamma, j] - self.eps_gamma * (b_gamma / self.M * (j+1) - sum([A_gamma[gamma][i] for i in self.selected])), 0), mu_bar)
+
+
+
+
+        # elif type(self.fairness_constraint) == Linear_constraint_cumulative: #old constraint but which seems no converge toward Hindisght fair AP
+        #     for j in range(self.M):
+        #
+        #         self.bids[j] = min(
+        #             (self.v_k[j]-self.mu_gamma[self.user[j], j]) / (1 + self.mu[j]  ),
+        #             self.Budgets[j])
+        #         win = self.bids[j] >= self.d_k[j]
+        #         if win:
+        #             self.selected += [j]
+        #         if j < self.M - 1:
+        #             self.Budgets[j + 1] = self.Budgets[j] - self.d_k[j] * win
+        #             self.mu[j + 1] = min(max(self.mu[j] - self.eps * (self.target_expenditure - self.d_k[j] * win), 0),
+        #                                  mu_bar)
+        #             for gamma in range(self.Gamma):
+        #                 self.mu_gamma[gamma, j + 1] = min(max(self.mu_gamma[gamma, j] - self.eps_gamma * (
+        #                         np.sum([self.o_gamma[gamma, :j]]) / (j + 1)
+        #                         - self.fairness_constraint.lam *sum([self.o_gamma[gamma, el] for el in self.selected]) / (len(
+        #                     self.selected) + 0.01)), 0), mu_bar)
+
+
+                    # for gamma in range(self.Gamma):
+                    #     self.mu_gamma[gamma, j + 1] = min(max(self.mu_gamma[gamma, j] - self.eps_gamma * (
+                    #             np.sum([self.o_gamma[gamma,el]- 1/2/self.fairness_constraint.lam for el in self.selected])), 0), mu_bar)
+
         self.utility = self.compute_utility()
 
 
@@ -182,7 +217,7 @@ class AdaptivePacingStrat_cumulative(Strategy):
         self.Budgets[0] = self.B
         self.target_expenditure = self.B / self.M
 
-        if type(self.fairness_constraint) in [Proportion_constraint, Proportion_constraint_cumulative]:
+        if type(self.fairness_constraint) in [Linear_constraint, Linear_constraint_cumulative]:
             self.mu_gamma = np.zeros((self.Gamma, self.M))
             self.o_gamma = np.zeros((self.Gamma, self.M))
             for gamma in range(self.Gamma):

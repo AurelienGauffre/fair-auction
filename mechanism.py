@@ -1,6 +1,6 @@
 import numpy as np
 
-from fairness_contraint import Proportion_constraint, Budget_proportion_constraint
+from fairness_contraint import Linear_constraint, Budget_proportion_constraint
 from utils import mask
 from mip import Model, xsum, minimize, BINARY, maximize
 
@@ -119,7 +119,7 @@ class MultiplicativePacing(Mechanism):
     def solve(self):
         model = Model()
         model.verbose = 0
-        if type(self.fairness_constraint) in [type(None), Proportion_constraint]:
+        if type(self.fairness_constraint) in [type(None), Linear_constraint]:
             v_bar = [np.max(self.bidders.values[:, j]) for j in range(self.M)]
 
             d = [[model.add_var(var_type=BINARY) for j in range(self.M)] for i in range(self.N)]
@@ -183,7 +183,7 @@ class MultiplicativePacing(Mechanism):
                 for i in range(self.N):
                     model += r[i][j] + w[i][j] <= 1
 
-            if type(self.fairness_constraint) == Proportion_constraint:
+            if type(self.fairness_constraint) == Linear_constraint:
                 l_1 = sum(self.users) / len(self.users)
                 l_0 = 1 - l_1
                 l_0 *= self.fairness_constraint.gamma
