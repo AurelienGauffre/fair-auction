@@ -44,7 +44,7 @@ def simulation_one_parameter(params, strats_type, constraints_type,n,plot=True):
 
             user = [0, 1] * (params['M'] // 2)
 
-            B = x * params['expenditure']
+            B = params['M'] * params['expenditure']
             np.random.seed(seed=j)
             values = np.random.random((params['M'], params['N']))
             v_k = values[:, 0]
@@ -91,48 +91,58 @@ def simulation_one_parameter(params, strats_type, constraints_type,n,plot=True):
         fig.show()
 
 
-def simulation_time(params, strats_type, constraints_type,plot=True):
+def simulation_time(params, strats_type, constraints_type,n,plot=True):
     """"
     """
     assert strats_type.keys() == constraints_type.keys()
 
-    n_strat = len(strats_type)
-    strats = {}
-    constraints = {}
-    df = pd.DataFrame(columns=['M', 'utility', 'fairness', 'name'], index=range(n_strat * len(params['M'])))
 
-    k = 0
+    df = {}
 
 
+    for j in range(n):
 
-    for i, x in enumerate(params['M']):
-        print(x)
-        assert x%2==0
-        user = [0, 1] * (x // 2)
+        n_strat = len(strats_type)
+        strats = {}
+        constraints = {}
+        df[j] = pd.DataFrame(columns=['M', 'utility', 'fairness', 'name'], index=range(n_strat * len(params['M'])))
+        k = 0
+        for i, x in enumerate(params['M']):
+            print(x)
+            assert x%2==0
+            user = [0, 1] * (x // 2)
 
-        B = x * params['expenditure']
-        np.random.seed(seed=0)
-        values = np.random.random((x, params['N']))
-        v_k = values[:, 0]
-        v_k[::2] *= 1 / params['bias']
-        v_k[1::2] *= params['bias']
-        print(v_k)
-        values = np.delete(values, 0, 1)
-        d_k = np.max(values, axis=1)
+            B = x * params['expenditure']
+            np.random.seed(seed=j)
+            values = np.random.random((x, params['N']))
+            v_k = values[:, 0]
+            v_k[::2] *= 1 / params['bias']
+            v_k[1::2] *= params['bias']
 
-        # instantiating constraints
-        for name, const_type in constraints_type.items():
-            if const_type is not None:
-                constraints[name] = const_type(params['lambda'])
-            else:
-                constraints[name] = None
-        # instantiating strats
-        for name, strat_type in strats_type.items():
-            strats[name] = strat_type(v_k, d_k, B, eps=params['eps'], eps_gamma=params['eps_gamma'], user=user,
-                                      fairness_constraint=constraints[name])
+            values = np.delete(values, 0, 1)
+            d_k = np.max(values, axis=1)
 
-        for name, strat in strats.items():
-            df.iloc[k, :] = [x, strat.utility, strat.compute_fairness(), name]
-            k += 1
+            # instantiating constraints
+            for name, const_type in constraints_type.items():
+                if const_type is not None:
+                    constraints[name] = const_type(params['lambda'])
+                else:
+                    constraints[name] = None
+            # instantiating strats
+            for name, strat_type in strats_type.items():
+                strats[name] = strat_type(v_k, d_k, B, eps=params['eps'], eps_gamma=params['eps_gamma'], user=user,
+                                          fairness_constraint=constraints[name])
+
+            for name, strat in strats.items():
+                df[j].iloc[k, :] = [x, strat.utility, strat.compute_fairness(), name]
+                k += 1
+
+    # if plot:
+    #     fig = px.scatter(df, x="M", y="fairness", color="name", log_x=True)
+    #     fig.update
+    #     for i in range(len(fig.data)): # https://community.plotly.com/t/lines-markers-mode-with-express/21707
+    #         fig.data[i].update(mode='markers+lines')
+    #     fig.update_layout(title=f" Fairness VS Time (logscale)")
+    #     fig.show()
     return df
 
